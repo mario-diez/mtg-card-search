@@ -1,4 +1,3 @@
-# coding=utf-8
 import json
 import pandas as pd
 import faiss
@@ -7,11 +6,12 @@ from sentence_transformers import SentenceTransformer, CrossEncoder
 import os
 import time
 
-DATAFRAME_FILE = 'unique_cards.pkl'
-INDEX_FILE = 'cards_faiss.index'
+DATAFRAME_FILE = '/app/data/unique_cards.pkl'
+INDEX_FILE = '/app/data/cards_faiss.index'
 
 print("Cargando modelos...")
-bi_encoder = SentenceTransformer('all-mpnet-base-v2') 
+bi_encoder = SentenceTransformer('all-MiniLM-L6-v2')
+# bi_encoder = SentenceTransformer('all-mpnet-base-v2') 
 cross_encoder = CrossEncoder('cross-encoder/ms-marco-MiniLM-L-6-v2')
 
 if os.path.exists(DATAFRAME_FILE) and os.path.exists(INDEX_FILE):
@@ -57,6 +57,9 @@ else:
     index.add(card_embeddings)
 
     print("Guardando en disco...")
+    if not os.path.exists(os.path.dirname(DATAFRAME_FILE)):
+        os.makedirs(os.path.dirname(DATAFRAME_FILE))
+
     df_unique.to_pickle(DATAFRAME_FILE)
     faiss.write_index(index, INDEX_FILE)
     print("¡Procesamiento inicial completado!")

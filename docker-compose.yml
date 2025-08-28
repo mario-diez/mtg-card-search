@@ -3,4 +3,8 @@ services:
     build: .
     ports:
       - "8501:8501"
-    restart: unless-stopped
+    volumes:
+      - mtg_data:/app/data
+
+volumes:
+  mtg_data:

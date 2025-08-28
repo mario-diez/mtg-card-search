@@ -3,19 +3,31 @@ import pandas as pd
 import faiss
 from sentence_transformers import SentenceTransformer, CrossEncoder
 import os
+import requests
 
-DATAFRAME_FILE = 'unique_cards.pkl'
-INDEX_FILE = 'cards_faiss.index'
+DATAFRAME_FILE = '/app/data/unique_cards.pkl'
+INDEX_FILE = '/app/data/cards_faiss.index'
 
 @st.cache_resource
 def load_resources():
     print("Loading models and data...")
-    bi_encoder = SentenceTransformer('all-mpnet-base-v2') 
+    bi_encoder = SentenceTransformer('all-MiniLM-L6-v2')
+    # bi_encoder = SentenceTransformer('all-mpnet-base-v2') 
     cross_encoder = CrossEncoder('cross-encoder/ms-marco-MiniLM-L-6-v2')
     df_unique = pd.read_pickle(DATAFRAME_FILE)
     index = faiss.read_index(INDEX_FILE)
     return bi_encoder, cross_encoder, df_unique, index
 
+@st.cache_data(ttl=3600) 
+def get_card_image(card_name):
+    try:
+        response = requests.get(f"https://api.scryfall.com/cards/named?fuzzy={card_name}")
+        response.raise_for_status()  
+        data = response.json()
+        return data['image_uris']['normal']
+    except requests.exceptions.RequestException as e:
+        st.warning(f"No se pudo obtener la imagen para {card_name}.")
+        return None
 bi_encoder, cross_encoder, df_unique, index = load_resources()
 
 def semantic_search(query_text, search_type, k=10, fetch_k=30):
@@ -52,7 +64,7 @@ def semantic_search(query_text, search_type, k=10, fetch_k=30):
     reranked = sorted(zip(candidates, scores), key=lambda x: x[1], reverse=True)[:k]
     return reranked
 
-st.title("Buscador de Cartas de Magic: The Gathering")
+st.title("MTG Search")
 
 search_type_str = st.radio(
     "Selecciona el tipo de búsqueda:",
@@ -64,18 +76,32 @@ query = st.text_input(f"Introduce {'el nombre de la carta' if search_type == 'c'
 
 if st.button("Buscar"):
     if query:
-        st.subheader(f"Resultados para la consulta: '{query}'")
-        results = semantic_search(query, search_type, k=10, fetch_k=30)
-        
-        for (i, full_text), score in results:
-            card_name = df_unique.iloc[i]['name']
-            card_text = df_unique.iloc[i]['text'].replace('\n', ' ')
-            card_mana_cost = df_unique.iloc[i]['manaCost']
-            card_type = df_unique.iloc[i]['type']
-            card_rarity = df_unique.iloc[i]['rarity']
-            
-            st.write(f"- **Score**: {score:.2f} | **Mana Cost**: {card_mana_cost} | **Type**: {card_type} | **Text**: {card_text}")
-            
+        with st.spinner('Buscando cartas...'):
+            st.subheader(f"Resultados para la consulta: '{query}'")
+            results = semantic_search(query, search_type, k=10, fetch_k=40)
+                
+            for (i, full_text), score in results:
+                card_name = df_unique.iloc[i]['name']
+                card_text = df_unique.iloc[i]['text'].replace('\n', ' ')
+                card_mana_cost = df_unique.iloc[i]['manaCost']
+                card_type = df_unique.iloc[i]['type']
+                card_rarity = df_unique.iloc[i]['rarity']
+                
+                with st.expander(f"**{card_name}**"):
+                    col1, col2 = st.columns([1, 2],gap="large")
+                    
+                    with col1:
+                        image_url = get_card_image(card_name)
+                        if image_url:
+                            st.image(image_url, caption=card_name, width=250)
+                        
+
+                    with col2:
+                        st.write(f"**Costo de Maná**: {card_mana_cost}")
+                        st.write(f"**Tipo**: {card_type}")
+                        st.write(f"**Rareza**: {card_rarity}")
+                        st.write(f"**Texto**: {card_text}")
+                        st.write(f"**Score de Relevancia**: {score:.2f}")
 
     else:
         st.error("Por favor, introduce un término de búsqueda.")
