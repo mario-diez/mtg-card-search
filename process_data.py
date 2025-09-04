@@ -37,20 +37,27 @@ else:
     df_unique['text'] = df_unique['text'].fillna('')
     df_unique['type'] = df_unique['type'].fillna('')
     df_unique['manaCost'] = df_unique['manaCost'].fillna('')
-    df_unique['colors'] = df_unique['colors'].fillna('')
-    df_unique['power'] = df_unique['power'].fillna('')
-    df_unique['toughness'] = df_unique['toughness'].fillna('')
+    indexed_texts = []
+    card_metadata = []
 
-    df_unique["full_text"] = (
-        df_unique["text"].fillna("") + " " +
-        df_unique["type"].fillna("") + " " +
-        df_unique["manaCost"].fillna("")
-    )
+    for idx, row in df_unique.iterrows():
+        paragraphs = row['text'].split('\n')
+        
+        for p in paragraphs:
+            p = p.strip()
+            if p: 
+                full_text = f"{p} {row['type']} {row['manaCost']}"
+                indexed_texts.append(full_text)
+                
+                card_metadata.append(idx)
 
+    df_indexed_metadata = pd.DataFrame(card_metadata, columns=['original_index'])
+    
     print(f"Procesando {len(df_unique)} cartas únicas...")
+    print(f"Indexando {len(indexed_texts)} párrafos y descripciones...")
     print("Generando embeddings (esto puede tardar varios minutos)...")
-    card_texts = df_unique['full_text'].tolist()
-    card_embeddings = bi_encoder.encode(card_texts, show_progress_bar=True)
+    
+    card_embeddings = bi_encoder.encode(indexed_texts, show_progress_bar=True)
 
     print("Creando índice Faiss...")
     index = faiss.IndexFlatL2(card_embeddings.shape[1])
@@ -61,5 +68,6 @@ else:
         os.makedirs(os.path.dirname(DATAFRAME_FILE))
 
     df_unique.to_pickle(DATAFRAME_FILE)
+    df_indexed_metadata.to_pickle('/app/data/indexed_metadata.pkl')
     faiss.write_index(index, INDEX_FILE)
     print("¡Procesamiento inicial completado!")
